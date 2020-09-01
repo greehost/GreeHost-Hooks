@@ -1,0 +1,11 @@
+[Unit]
+Description=GreeHost::Hooks API @ hooks.greehost.com
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/plackup -s FCGI -l /var/run/hooks.greehost.com.socket -a /usr/local/share/perl5/GreeHost/Hooks.pm
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
