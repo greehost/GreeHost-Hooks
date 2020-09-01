@@ -1,0 +1,13 @@
+module nginx-allow-socket 1.0;
+
+require {
+        type unconfined_t;
+        type httpd_t;
+        class unix_stream_socket connectto;
+}
+
+#============= httpd_t ==============
+
+#!!!! The file '/run/hooks.greehost.com.socket' is mislabeled on your system.  
+#!!!! Fix with $ restorecon -R -v /run/hooks.greehost.com.socket
+allow httpd_t unconfined_t:unix_stream_socket connectto;
