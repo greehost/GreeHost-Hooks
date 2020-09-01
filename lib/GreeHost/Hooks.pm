@@ -3,34 +3,48 @@
 package GreeHost::Hooks;
 use Web::Simple;
 use Plack::Request;
-use JSON::MaybeXS qw( decode_json );
+use JSON::MaybeXS qw( decode_json encode_json );
 use Try::Tiny;
 use Object::Remote;
 use GreeHost::Builder;
+use GreeHost::Minion;
         
-# TODO: Kill me
-use Data::Dumper;
-
 sub dispatch_request {
-    'POST + /gitea' => sub { _process_hook_gitea(@_) }
+    return (
+        'POST + /gitea'    => sub { _process_hook_gitea(@_)    },
+        'POST + /project'  => sub { _process_hook_project(@_)  },
+        'POST + /sslstore' => sub { _process_hook_sslstore(@_) },
+    );
+}
+
+sub _process_hook_project {
+    my ( $self, $env ) = @_;
+    my $req  = Plack::Request->new($env);
+    my $push = try { decode_json($req->raw_body) };
+}
+
+sub _process_hook_sslstore {
+    my ( $self, $env ) = @_;
+    my $req  = Plack::Request->new($env);
+    my $push = try { decode_json($req->raw_body) };
+
+    my $id = GreeHost::Minion->new->enqueue( 'ssl_store_add' => [ 
+        name    => $push->{name}, 
+        domains =>  [ @{$push->{domains}} ],
+        key     => $push->{linode_dns_key} 
+    ]);
+
+    return [ 200, [ 'Content-Type' => 'application/json' ], [ encode_json( { status => 1, job_id => $id } ) ] ];
 }
 
 sub _process_hook_gitea {
-        my ( $self, $env ) = @_;
-        my $req  = Plack::Request->new($env);
-        my $push = try { decode_json($req->raw_body) };
+    my ( $self, $env ) = @_;
+    my $req  = Plack::Request->new($env);
+    my $push = try { decode_json($req->raw_body) };
 
-        # Throw an error if $push is wrong.
+    my $id = GreeHost::Minion->new->enqueue( 'build_project' => [ event => $push ] );
 
-        # Find the account this is for so we can find the shared key
-        
-        # Calculate payload sig and verify, or throw error (also report to NOC)
-
-        # Trigger build event for repo (should be minion)
-        my $conn = Object::Remote->connect( 'root@192.168.18.11' );
-        GreeHost::Builder->can::on( $conn, 'build_project' )->($push);
-
-        return [ 200, [ ], [ ] ];
+    return [ 200, [ 'Content-Type' => 'application/json' ], [ encode_json( { status => 1, job_id => $id } ) ] ];
 }
 
 __PACKAGE__->run_if_script;
