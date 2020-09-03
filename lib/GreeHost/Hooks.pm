@@ -8,33 +8,16 @@ use Try::Tiny;
 use Object::Remote;
 use GreeHost::Builder;
 use GreeHost::Minion;
+
+open my $cfh, '<', '/opt/greehost/hooks/projects.json'
+    or die "Failed to open /opt/greehost/hooks/projects.json for reading: $!";
+my $projects = decode_json( do { local $/; <$cfh> } );
+close $cfh;
         
 sub dispatch_request {
     return (
         'POST + /gitea'    => sub { _process_hook_gitea(@_)    },
-        'POST + /project'  => sub { _process_hook_project(@_)  },
-        'POST + /sslstore' => sub { _process_hook_sslstore(@_) },
     );
-}
-
-sub _process_hook_project {
-    my ( $self, $env ) = @_;
-    my $req  = Plack::Request->new($env);
-    my $push = try { decode_json($req->raw_body) };
-}
-
-sub _process_hook_sslstore {
-    my ( $self, $env ) = @_;
-    my $req  = Plack::Request->new($env);
-    my $push = try { decode_json($req->raw_body) };
-
-    my $id = GreeHost::Minion->new->enqueue( 'ssl_store_add' => [ 
-        name    => $push->{name}, 
-        domains =>  [ @{$push->{domains}} ],
-        key     => $push->{linode_dns_key} 
-    ]);
-
-    return [ 200, [ 'Content-Type' => 'application/json' ], [ encode_json( { status => 1, job_id => $id } ) ] ];
 }
 
 sub _process_hook_gitea {
@@ -42,7 +25,13 @@ sub _process_hook_gitea {
     my $req  = Plack::Request->new($env);
     my $push = try { decode_json($req->raw_body) };
 
-    my $id = GreeHost::Minion->new->enqueue( 'build_project' => [ event => $push ] );
+    my $repo = $push->{repository}{ssh_url};
+
+    if ( ! exists $projects->{$repo} ) {
+        return [ 404, [ 'Content-Type' => 'application/json' ], [ encode_json( { status => 0, error => "$repo not found" } ) ] ];
+    }
+
+    my $id = GreeHost::Minion->new->enqueue( 'build_project' => [ $projects->{$repo} ], { queue => 'build_project' } );
 
     return [ 200, [ 'Content-Type' => 'application/json' ], [ encode_json( { status => 1, job_id => $id } ) ] ];
 }

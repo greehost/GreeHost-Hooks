@@ -1,0 +1,23 @@
+#!/usr/bin/env perl
+use warnings;
+use strict;
+use JSON::MaybeXS qw( encode_json );
+
+my $ssh_key = do { local $/; <DATA> };
+
+my $projects = {
+    'git@gitea.example.com:user/repo.git' => {
+        pull => {
+            class                 => 'Git',
+            repo                  => 'git@gitea.example.com:user/repo.git',
+            ssh_priv_key_contents => $ssh_key,
+        },
+    },
+};
+
+print encode_json( $projects );
+
+__DATA__
+-----BEGIN OPENSSH PRIVATE KEY-----
+-----END OPENSSH PRIVATE KEY-----
+
